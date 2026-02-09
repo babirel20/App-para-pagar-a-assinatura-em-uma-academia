@@ -1,0 +1,270 @@
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { CheckCircle, XCircle, LogOut, CreditCard } from "lucide-react";
+
+// ====== CONFIG ======
+const DURACAO = {
+  "Diária": 1,
+  Mensal: 30,
+  Trimestral: 90,
+  Anual: 365,
+};
+
+// ====== BASE DE CLIENTES ======
+function addDias(data, dias) {
+  const d = new Date(data);
+  d.setDate(d.getDate() + dias);
+  return d;
+}
+
+const baseClientes = [
+  { id: 1, nome: "João Silva", email: "joao@academia.com", pago: false, vencimento: null },
+  { id: 2, nome: "Maria Souza", email: "maria@academia.com", pago: true, vencimento: addDias(new Date(), 12) },
+  { id: 3, nome: "Carlos Lima", email: "carlos@academia.com", pago: false, vencimento: null },
+];
+
+const planos = [
+  { nome: "Diária", valor: 20 },
+  { nome: "Mensal", valor: 90 },
+  { nome: "Trimestral", valor: 250 },
+  { nome: "Anual", valor: 900 },
+];
+
+function diasRestantes(vencimento) {
+  if (!vencimento) return 0;
+  const hoje = new Date();
+  const diff = vencimento - hoje;
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
+// ====== APP ======
+export default function AppAcademiaCliente() {
+  const [email, setEmail] = useState("");
+  const [cliente, setCliente] = useState(null);
+  const [clientes, setClientes] = useState(baseClientes);
+  const [erro, setErro] = useState("");
+
+  const [planoSelecionado, setPlanoSelecionado] = useState(null);
+  const [pixInfo, setPixInfo] = useState(null);
+  const [loadingPlano, setLoadingPlano] = useState(null);
+
+  // ===== LOGIN =====
+  function login() {
+    const achado = clientes.find(
+      (c) => c.email.toLowerCase().trim() === email.toLowerCase().trim()
+    );
+
+    if (achado) {
+      setCliente(achado);
+      setErro("");
+    } else {
+      setErro("Cliente não encontrado. Teste: joao@academia.com");
+    }
+  }
+
+  function sair() {
+    setCliente(null);
+    setEmail("");
+    setPlanoSelecionado(null);
+    setPixInfo(null);
+  }
+
+  // ===== PAGAMENTO =====
+  async function pagar(plano) {
+    try {
+      setLoadingPlano(plano.nome);
+      setPlanoSelecionado(plano);
+
+      await new Promise((r) => setTimeout(r, 800));
+
+      // 🔹 Em produção: vem do gateway Pix
+      const payload = "000201PIXEXEMPLOCODIGO";
+
+      setPixInfo({
+        copiaCola: payload,
+      });
+    } catch (e) {
+      alert("Erro ao gerar Pix");
+    } finally {
+      setLoadingPlano(null);
+    }
+  }
+
+  function confirmarPagamento() {
+    if (!planoSelecionado) return;
+
+    const venc = addDias(new Date(), DURACAO[planoSelecionado.nome]);
+
+    const atualizados = clientes.map((c) =>
+      c.id === cliente.id
+        ? { ...c, pago: true, plano: planoSelecionado.nome, vencimento: venc }
+        : c
+    );
+
+    const novoCliente = {
+      ...cliente,
+      pago: true,
+      plano: planoSelecionado.nome,
+      vencimento: venc,
+    };
+
+    setClientes(atualizados);
+    setCliente(novoCliente);
+    setPixInfo(null);
+    setPlanoSelecionado(null);
+  }
+
+  // ===== LOGIN TELA =====
+  if (!cliente) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <Card className="w-full max-w-md rounded-2xl shadow-xl">
+          <CardContent className="p-6 flex flex-col gap-4">
+            <h1 className="text-2xl font-bold text-center">
+              App do Cliente — Academia
+            </h1>
+
+            <input
+              className="border rounded-xl p-3"
+              placeholder="Digite seu email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <Button onClick={login} className="rounded-2xl h-12">
+              Login
+            </Button>
+
+            {erro && (
+              <p className="text-sm text-red-600 text-center">{erro}</p>
+            )}
+
+            <p className="text-xs opacity-70 text-center">
+              Emails de teste: joao@academia.com / maria@academia.com
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const dias = diasRestantes(cliente.vencimento);
+
+  // ===== TELA PIX =====
+  if (pixInfo && planoSelecionado) {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+      pixInfo.copiaCola
+    )}`;
+
+    return (
+      <div className="min-h-screen p-8 flex items-center justify-center">
+        <Card className="rounded-2xl shadow-xl w-full max-w-md">
+          <CardContent className="p-6 flex flex-col gap-4 text-center">
+            <h2 className="text-xl font-bold">
+              Pagamento — {planoSelecionado.nome}
+            </h2>
+
+            <p className="text-lg font-semibold">
+              Valor: R$ {planoSelecionado.valor}
+            </p>
+
+            {/* ✅ QR CODE */}
+            <div className="flex justify-center">
+              <img src={qrUrl} alt="QR Code Pix" className="rounded-xl border p-2" />
+            </div>
+
+            <div className="border rounded-xl p-3 text-xs break-all bg-muted">
+              {pixInfo.copiaCola}
+            </div>
+
+            <Button
+              className="rounded-2xl h-12"
+              onClick={() => navigator.clipboard.writeText(pixInfo.copiaCola)}
+            >
+              Copiar código Pix
+            </Button>
+
+            <Button
+              className="rounded-2xl h-12"
+              onClick={confirmarPagamento}
+            >
+              Já paguei
+            </Button>
+
+            <Button
+              variant="outline"
+              className="rounded-2xl h-12"
+              onClick={() => setPixInfo(null)}
+            >
+              Cancelar
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ===== PAINEL CLIENTE =====
+  return (
+    <div className="min-h-screen p-8 grid gap-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Olá, {cliente.nome}</h1>
+        <Button variant="outline" onClick={sair} className="rounded-2xl h-12 flex gap-2">
+          <LogOut size={18} /> Sair
+        </Button>
+      </div>
+
+      <Card className="rounded-2xl shadow-xl">
+        <CardContent className="p-6 flex flex-col gap-4">
+          <h2 className="text-xl font-semibold">Status do Pagamento</h2>
+
+          {cliente.pago ? (
+            <>
+              <div className="flex items-center gap-3 text-green-600 text-lg">
+                <CheckCircle />
+                Pagamento verificado — Plano {cliente.plano}
+              </div>
+
+              <div className="text-lg font-semibold">
+                ⏳ Dias restantes: {dias}
+              </div>
+
+              <div className="text-sm opacity-70">
+                Vencimento: {cliente.vencimento?.toLocaleDateString()}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-3 text-red-600 text-lg">
+              <XCircle /> 🔴 Pagamento pendente
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!cliente.pago && (
+        <Card className="rounded-2xl shadow-xl">
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Escolha seu plano</h2>
+            <div className="grid md:grid-cols-4 gap-4">
+              {planos.map((p) => (
+                <div key={p.nome} className="border rounded-2xl p-4 flex flex-col gap-3">
+                  <p className="font-semibold">{p.nome}</p>
+                  <p className="text-lg">R$ {p.valor}</p>
+                  <Button
+                    className="rounded-2xl h-12 flex gap-2"
+                    onClick={() => pagar(p)}
+                    disabled={loadingPlano === p.nome}
+                  >
+                    <CreditCard size={18} />
+                    {loadingPlano === p.nome ? "Processando..." : "Pagar"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
